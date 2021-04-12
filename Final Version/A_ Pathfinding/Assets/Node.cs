@@ -1,16 +1,15 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-
-public class Node : IHeapItem<Node>
+using System;
+public class Node : IComparable<Node>
 {
   public bool walkable;
   public Vector3 worldPosition;
   public int gridX;
   public int gridY;
-
-  public int gCost;
-  public int hCost;
+  public int fCost=2000000;
+  public int gCost=2000000;
   public Node parent; //parent variable 
   int heapIndex;
   
@@ -22,13 +21,6 @@ public Node(bool _walkable, Vector3 _worldPos, int _gridX, int _gridY){
 	gridY = _gridY;	
 
 	}
-
-public int fCost
-    {
-        get	{
-			return gCost + hCost; //get fCost by calculating g + h costs
-		}
-    }
 
 public int HeapIndex //implement all the items in the iHeapIndex Interface from Heap.cs
     {
@@ -42,16 +34,12 @@ public int HeapIndex //implement all the items in the iHeapIndex Interface from 
         }
     }
 
-public int CompareTo(Node nodeToCompare) //compare the fcosts of the 2 nodes 
-    {
-        int compare = fCost.CompareTo(nodeToCompare.fCost); //compare the fCosts of the 2 nodes 
-
-        if(compare == 0) //if compare is equal to 0 or in other words the 2 fcosts of the nodes is equal then
+ public int CompareTo(Node other)
         {
-            compare = hCost.CompareTo(nodeToCompare.hCost); //then we compare it to the hCost as a tie breaker
+            //use gcost as tie breaker
+            if(fCost.CompareTo(other.fCost) == 0)
+                return gCost.CompareTo(other.gCost);
+            else
+                return fCost.CompareTo(other.fCost);
         }
-        return -compare; //return 1 if the item has a higher priority than the one we are comparing it to, CompareTo returns 1 if the integer is higher, but since the nodes are reversed (since we are finding the path not traveling towards it) then we return negative compare instead of regular compare 
-    }
-
-
 }

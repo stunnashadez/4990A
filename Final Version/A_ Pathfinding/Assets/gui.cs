@@ -25,7 +25,7 @@ public class gui : MonoBehaviour
     public static int level = 0;                            //Saves the current level loaded
 
     AStar aStar;                                            //Object declaration for pathfinding algorithms
-    Gridd grid;
+    public static Gridd grid;
     DFS dfs;
     BFS bfs;
 
@@ -41,10 +41,6 @@ public class gui : MonoBehaviour
     {
         windowRect = GUI.Window(0, windowRect, drawWindow, "");
 
-    }
-
-    void Update()
-    {
     }
 
     void drawWindow(int windowID)

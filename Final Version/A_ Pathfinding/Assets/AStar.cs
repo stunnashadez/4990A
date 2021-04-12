@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using System.Diagnostics;
-
+using System;
 public class AStar : MonoBehaviour
 {
 
@@ -29,6 +29,7 @@ public class AStar : MonoBehaviour
         {
             gui.isVisualEnabled = false;
             StartCoroutine(FindPath(seeker.position, target.position));
+            gui.grid.CreateGrid();
             gui.isVisualEnabled = true;
             StartCoroutine(FindPath(seeker.position, target.position));
         }
@@ -38,92 +39,99 @@ public class AStar : MonoBehaviour
 
     IEnumerator FindPath(Vector3 startPos, Vector3 targetPos)  //start position and target position
     {
-        gui.isRunning = true;               //algorithm has started, tell the gui we are running so that no other algo's can be started
-        Stopwatch sw = new Stopwatch();     //create a stopwatch to time the speed of the implementation of the algorithm using heap method 
-        sw.Start();                         //start timer before starting pathfinding 
+        gui.isRunning = true;           //Lock gui
+        Stopwatch sw = new Stopwatch(); //create a stopwatch to time the speed of the implementation of the algorithm using heap method 
+        sw.Start();                     //start timer before starting pathfinding 
 
         //need to convert world positions into node  
-        Node startNode = grid.NodeFromWorldPoint(startPos);   //create a start node
-        Node targetNode = grid.NodeFromWorldPoint(targetPos); //create a target node
+        Node startNode = grid.NodeFromWorldPoint(startPos);     //create a start node
+        Node targetNode = grid.NodeFromWorldPoint(targetPos);   //create a target node
+        HashSet<Node> closeSet = new HashSet<Node>();           //use a hashset for our closed set
 
-        Heap<Node> openSet = new Heap<Node>(grid.MaxSize); //create a list of nodes for our open set
-        HashSet<Node> closeSet = new HashSet<Node>();      //use a hashset for our closed set
-        openSet.Add(startNode);                            //add the starting node to the open set
-        grid.path = new List<Node>();
-        while (openSet.Count > 0)                          //enter a loop, while openSet count is greater than 0
+        Heap<Node> openSet = new Heap<Node>();                  //Min Heap is used to keep track of Nodes with minimum fCost
+        HashSet<Node> toExplore = new HashSet<Node>();          //Hashset is used to check if a Node has been explored
+        List<Node> path = new List<Node>();                     //create a list of nodes called path that will later be used to return final path
+        grid.path = new List<Node>();                           //Initialize grid.path
+
+
+        //Initilization 
+        openSet.Enqueue(startNode);
+        toExplore.Add(startNode);
+        startNode.gCost=0;
+        startNode.fCost=GetDistance(startNode, targetNode);
+        
+        while (openSet.Count != 0) //while priority queue is not empty
         {
-            Node currentNode = openSet.RemoveFirst(); //set current node to the first element in the openset
-            closeSet.Add(currentNode);                //add the currentNode to the closedSet
+            Node currentNode = openSet.Dequeue();
+            toExplore.Remove(currentNode);
 
-            //This is visualization code
-            if (gui.isVisualEnabled)
-            {
-                grid.path.Add(currentNode);                                 //Add current node to visual representation grid
-                if (closeSet.Count % 15 == 0)                               //This makes sure visualization is only updated every 15 nodes (save resources)
-                    yield return new WaitForSeconds(gui.visualdelay);       //delay for as much as visualization speed is set in the gui
+            //code that controls visulization of pathfinding
+            if(gui.isVisualEnabled){
+                //Add current node to the grid path (which renders using gizmos)
+                grid.path.Add(currentNode);
+
+                //We only delay execution for every 15 nodes traversed, this is to not slow down pathfinding completely.
+                if (openSet.Count % 15 == 0)
+                    yield return new WaitForSeconds(gui.visualdelay);
             }
-            if (currentNode == targetNode) //corrent path has been found
+           
+            if(currentNode == targetNode) //corrent path has been found
             {
-                sw.Stop();                           //end timer when path has been found 
-                RetracePath(startNode, targetNode);  //call the RetracePath passing in the startNode we want to start at and the targetNode that we want to finish at
+                sw.Stop(); //end timer when path has been found 
 
-                //Only show result if we are running in non-visualization mode
-                if (gui.isVisualEnabled == false)
+                //Backtrack using parent nodes
+                path.Add(currentNode);
+                while(currentNode != startNode){
+                    path.Add(currentNode.parent);
+                    currentNode = currentNode.parent;
+                }
+
+                //Update the grid path so that the correct path is rendered with gizmos
+                grid.path = path;
+                
+                //Only display results if visualization is disabled (Since visualization applies delay, elapsed time would not be accurate)
+                if(gui.isVisualEnabled == false)
                     gui.results = "Path found: " + sw.ElapsedMilliseconds + " ms " + " | " + "Distance : " + grid.path.Count;
 
-                gui.isRunning = false;  //tell gui we are done
+                //Release lock 
+                gui.isRunning = false;
                 yield break;
             }
-            
+
             foreach (Node neighbour in grid.GetNeighbours(currentNode)) //for each neighbour of the current node 
             {
-                if (!neighbour.walkable || closeSet.Contains(neighbour)) //if the neighbouring node is not walkable or in the closed set
+                if(neighbour.walkable) //if the neighbouring node is walkable
                 {
-                    continue; //then skip to the next neighbour 
-                }
-
-                int newMovementCostToNeighbour = currentNode.gCost + GetDistance(currentNode, neighbour); //variable for the cost of the new path to neighbour equal to current node's gCost + the cost of getting from the current node to the neighbour
-                if (newMovementCostToNeighbour < neighbour.gCost || !openSet.Contains(neighbour)) //if cost of the new path to neighbour is less than neighbour's current gCost or if the neighbour node is not in the current open set
-                {
-                    //set the fCost of the neighbour by calculating the gCost and hCost 
-                    neighbour.gCost = newMovementCostToNeighbour; //gCost of the neighbour is newMovementCostToNeighbour 
-                    neighbour.hCost = GetDistance(neighbour, targetNode); //hCost is the distance between neighbour node and the target node 
-
-                    neighbour.parent = currentNode; //set the parent of the neighbour to the current node
-
-                    if (!openSet.Contains(neighbour))
-                    { //check if the neighbour is in the openSet, if not add it in.
-                        openSet.Add(neighbour); //add neighbour to the openSet
+                    int alt = currentNode.gCost+1;          //check tentative gcost
+                    if(alt<neighbour.gCost){                
+                        neighbour.parent = currentNode;     //update neighbour gcost and fcost
+                        neighbour.gCost = alt;
+                        neighbour.fCost = alt+ GetDistance(neighbour, targetNode);
+                        if(!toExplore.Contains(neighbour)){ //check hashset in O(1) to see if node has already been found
+                            openSet.Enqueue(neighbour);
+                            toExplore.Add(neighbour);
+                        }
                     }
+                    
                 }
+
             }
         }
         gui.results = "Target not Reachable!";
         gui.isRunning = false;
     }
 
-    void RetracePath(Node startNode, Node endNode) //method to retrace our path from the parent node at which we will have our optimal path/solution using the retraced path
-    {
-        List<Node> path = new List<Node>(); //create a list of nodes called path
-        Node currentNode = endNode; //create a node called current node which will be equal to the endNode, so that we can use this to trace the path back
-
-        while (currentNode != startNode) //so while this currentNode that is equal to the endNode does not equal the startNode
-        {
-            path.Add(currentNode); //then add that node to the list of nodes of the path
-            currentNode = currentNode.parent; //then the currentNode goes back to the parent to restart the loop so we can continue to retrace steps 
+    Node getMinElement(List<Node> elements){
+        Node min = elements[0];
+        foreach(Node element in elements){
+            if (element.fCost<min.fCost)
+                min = element;
         }
-        path.Reverse(); //Since we are retracing our steps back, the path is going backwards, so we need to use the reverse() function to reverse the direction so get the path in the correct direction 
-        path.Add(startNode);
-        grid.path = path; //use to visual our path
+        return min;
     }
-
     int GetDistance(Node nodeA, Node nodeB) //Method to find the distance between any given two nodes
     {
-        int dstX = Mathf.Abs(nodeA.gridX - nodeB.gridX); //an integer for the distance on the x-axis
-        int dstY = Mathf.Abs(nodeA.gridY - nodeB.gridY); //an integer for the distance on the Y-axis
-
-        if (dstX > dstY)
-            return 14 * dstY + 10 * (dstX - dstY); //double check this to confirm 13:58 part3 and part1
-        return 14 * dstY + 10 * (dstY - dstX);
+        //This is Chebyshev distance formula
+        return Math.Max(Math.Abs(nodeB.gridX-nodeA.gridX),Math.Abs(nodeB.gridY-nodeA.gridY));
     }
 }
